@@ -1,0 +1,8 @@
+{
+  "name": "InsyT",
+  "description": "Uncover trends, detect anomalies, train predictive models, and turn spreadsheets into evidence-backed decisions.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

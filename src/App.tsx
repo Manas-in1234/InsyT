@@ -1,0 +1,898 @@
+import { useCallback, useRef, useState } from 'react';
+import {
+  Activity,
+  AlertCircle,
+  ArrowDownToLine,
+  ArrowRight,
+  BarChart3,
+  BrainCircuit,
+  Check,
+  ChevronDown,
+  CircleHelp,
+  Database,
+  FileSpreadsheet,
+  FileText,
+  LayoutDashboard,
+  LoaderCircle,
+  Menu,
+  Network,
+  PanelLeftClose,
+  Sparkles,
+  Table2,
+  TrendingUp,
+  UploadCloud,
+  X,
+} from 'lucide-react';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import type { Analysis, Chart } from './types';
+import PredictivePanel from './PredictivePanel';
+import { analyzeUploadedFile } from './services/api';
+
+const orange = '#ef763d';
+
+function App() {
+  const [data, setData] = useState<Analysis | null>(null);
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [drag, setDrag] = useState(false);
+  const [active, setActive] = useState('Overview');
+  const [mobile, setMobile] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+
+  const upload = useCallback(async (file?: File) => {
+    if (!file) return;
+    setError('');
+    if (!/\.(csv|xlsx)$/i.test(file.name)) {
+      setError('Choose a CSV or XLSX spreadsheet.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('This file exceeds the 10 MB upload limit.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await analyzeUploadedFile(file);
+      setSourceFile(file);
+      setData(res);
+      setActive('Overview');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Analysis failed. Please try again.');
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = '';
+    }
+  }, []);
+
+  const tryDemo = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      const response = await fetch('/sample_sales.csv');
+      if (!response.ok) throw new Error('The demo dataset could not be loaded. Please try again.');
+      const blob = await response.blob();
+      const sample = new File([blob], 'insyt_sample_sales.csv', { type: 'text/csv' });
+      await upload(sample);
+    } catch (e) {
+      setBusy(false);
+      setError(e instanceof Error ? e.message : 'Could not load the demo dataset. Please try again.');
+    }
+  };
+
+  const download = () => {
+    if (!data) return;
+    const blob = new Blob([data.report], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `insyt-report-${data.metadata.filename.replace(/\.[^.]+$/, '')}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => upload(e.target.files?.[0]);
+
+  const nav = [
+    { name: 'Overview', icon: LayoutDashboard },
+    { name: 'Data Analysis', icon: BarChart3 },
+    { name: 'Predictive Intelligence', icon: BrainCircuit },
+    { name: 'Trends & Anomalies', icon: Activity },
+    { name: 'AI Report', icon: Sparkles },
+    { name: 'Dataset Profile', icon: Table2 },
+  ];
+
+  return (
+    <div className="app-shell">
+      <aside className={`sidebar ${mobile ? 'mobile-open' : ''}`}>
+        <div className="brand">
+          <div className="brand-symbol">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <span className="brand-name">
+            InsyT<span className="brand-dot">.</span>
+          </span>
+        </div>
+        <div className="workspace">
+          <span className="workspace-mark">I</span>
+          <span>
+            <b>My workspace</b>
+            <small>Data insights workspace</small>
+          </span>
+          <ChevronDown size={15} />
+        </div>
+        <div className="nav-label">WORKSPACE</div>
+        <nav>
+          {nav.map((n) => (
+            <button
+              key={n.name}
+              className={`nav-item ${active === n.name ? 'active' : ''}`}
+              onClick={() => {
+                setActive(n.name);
+                setMobile(false);
+                if (!data && n.name !== 'Overview') {
+                  setError(
+                    n.name === 'Predictive Intelligence'
+                      ? 'Upload a dataset first to train a model on its columns.'
+                      : 'Upload a dataset to explore this section.'
+                  );
+                }
+              }}
+            >
+              <n.icon size={17} strokeWidth={1.8} />
+              <span>{n.name}</span>
+              {n.name === 'AI Report' && data && (
+                <span className="nav-new">
+                  <Sparkles size={11} />
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+        <div className="side-bottom">
+          <div className="side-help">
+            <CircleHelp size={17} />
+            <span>Need a hand?</span>
+            <ArrowRight size={14} />
+          </div>
+          <div className="side-user">
+            <div className="user-avatar">IN</div>
+            <span>
+              <b>InsyT</b>
+              <small>Personal workspace</small>
+            </span>
+            <PanelLeftClose size={16} className="side-collapse" />
+          </div>
+        </div>
+      </aside>
+      <main className="main">
+        <header className="topbar">
+          <button className="mobile-menu" onClick={() => setMobile(!mobile)}>
+            <Menu size={20} />
+          </button>
+          <div className="crumb">
+            Workspace <span>/</span> <b>{active}</b>
+          </div>
+          <div className="top-actions">
+            <div className="api-pill">
+              <i></i> Analysis starts on upload
+            </div>
+            {data && (
+              <button className="btn btn-outline btn-small" onClick={() => input.current?.click()}>
+                <UploadCloud size={15} /> New analysis
+              </button>
+            )}
+            <div className="avatar-small">IN</div>
+          </div>
+        </header>
+        <div className="content">
+          <div className="page-heading">
+            <div>
+              <div className="eyebrow">
+                <span className="eyebrow-line"></span> YOUR ANALYTICS WORKSPACE
+              </div>
+              <h1>Turn raw data into clear decisions.</h1>
+              <p>
+                Upload your spreadsheet to uncover trends, detect anomalies, understand your data, and generate evidence-backed
+                reports.
+              </p>
+            </div>
+            {data && (
+              <button className="btn btn-primary" onClick={() => input.current?.click()}>
+                <UploadCloud size={16} /> Upload dataset
+              </button>
+            )}
+          </div>
+          <input ref={input} type="file" accept=".csv,.xlsx" hidden onChange={onFile} />
+          {error && (
+            <div className="error-banner">
+              <AlertCircle size={17} />
+              <span>{error}</span>
+              <button onClick={() => setError('')}>
+                <X size={15} />
+              </button>
+            </div>
+          )}
+          {busy && (
+            <div className="loading-banner">
+              <LoaderCircle className="spin" size={18} />
+              <span>Reading your data and looking for meaningful patterns…</span>
+            </div>
+          )}
+          {!data ? (
+            <>
+              <div
+                className={`upload-card ${drag ? 'is-dragging' : ''}`}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  setDrag(true);
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrag(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDrag(false);
+                  upload(e.dataTransfer.files?.[0]);
+                }}
+              >
+                <div className="upload-icon">
+                  <UploadCloud size={25} />
+                </div>
+                <h2>Start with a spreadsheet</h2>
+                <p className="upload-copy">Drop your file here, or browse to find it on your device.</p>
+                <button className="btn btn-primary browse-btn" onClick={() => input.current?.click()} disabled={busy}>
+                  <UploadCloud size={16} /> Browse files <ArrowRight size={15} />
+                </button>
+                <div className="file-rules">
+                  <span>
+                    <FileSpreadsheet size={14} /> CSV or XLSX
+                  </span>
+                  <i></i>
+                  <span>Up to 10 MB</span>
+                  <i></i>
+                  <span>Up to 100,000 rows</span>
+                </div>
+              </div>
+              <div className="lower-grid">
+                <div className="welcome-card">
+                  <div className="welcome-art">
+                    <div className="art-chart">
+                      <div className="art-grid">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                      <svg viewBox="0 0 240 100" preserveAspectRatio="none">
+                        <path
+                          d="M4 78 C25 76 34 61 53 66 S77 84 97 58 S125 47 143 53 S164 68 185 31 S215 29 236 11"
+                          fill="none"
+                          stroke="#ef763d"
+                          strokeWidth="3"
+                        />
+                        <path
+                          d="M4 78 C25 76 34 61 53 66 S77 84 97 58 S125 47 143 53 S164 68 185 31 S215 29 236 11 L236 100 L4 100Z"
+                          fill="url(#fade)"
+                        />
+                        <defs>
+                          <linearGradient id="fade" x1="0" x2="0" y1="0" y2="1">
+                            <stop stopColor="#ef763d" stopOpacity=".2" />
+                            <stop offset="1" stopColor="#ef763d" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                      <div className="art-chip">
+                        <TrendingUp size={13} /> Growth spotted
+                      </div>
+                    </div>
+                  </div>
+                  <div className="welcome-text">
+                    <div className="card-eyebrow">
+                      <Sparkles size={13} /> A clearer view starts here
+                    </div>
+                    <h3>
+                      From raw rows to
+                      <br />
+                      real understanding.
+                    </h3>
+                    <p>
+                      InsyT profiles your columns, checks for data quality issues, and surfaces patterns worth a closer look.
+                    </p>
+                    <div className="benefit-row">
+                      <span>
+                        <Check size={13} /> Statistics from your data
+                      </span>
+                      <span>
+                        <Check size={13} /> Findings with evidence
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="sample-card">
+                  <div className="sample-head">
+                    <div className="sample-icon">
+                      <FileText size={19} />
+                    </div>
+                    <span className="sample-badge">TRY A SAMPLE</span>
+                  </div>
+                  <h3>See what InsyT can do</h3>
+                  <p>Explore a synthetic 200-row retail dataset with missing values, duplicate records, and unusual observations.</p>
+                  <button className="btn btn-primary btn-demo" onClick={tryDemo} disabled={busy}>
+                    <Sparkles size={14} />
+                    {busy ? 'Loading demo…' : 'Try Demo Dataset'}
+                    <ArrowRight size={14} />
+                  </button>
+                  <a className="sample-link" href="/sample_sales.csv" download="insyt_sample_sales.csv">
+                    Download Sample CSV <ArrowDownToLine size={14} />
+                  </a>
+                </div>
+              </div>
+              <div className="how-row">
+                <div className="how-intro">
+                  <span>BUILT FOR CLARITY</span>
+                  <b>
+                    Three steps to a<br />
+                    better decision.
+                  </b>
+                </div>
+                {[
+                  { n: '01', t: 'Upload your file', d: 'Start with a CSV or Excel sheet.' },
+                  { n: '02', t: 'See what stands out', d: 'Stats and patterns, calculated from your data.' },
+                  { n: '03', t: 'Know what to do next', d: 'A concise report with practical next steps.' },
+                ].map((x) => (
+                  <div className="how-step" key={x.n}>
+                    <span>{x.n}</span>
+                    <b>{x.t}</b>
+                    <small>{x.d}</small>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <Dashboard data={data} sourceFile={sourceFile} active={active} setActive={setActive} download={download} />
+          )}
+          <footer className="footer">
+            <span>InsyT · Your data. Your insights. Smarter decisions.</span>
+            <span>CSV and Excel · Evidence-backed analysis</span>
+          </footer>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function Dashboard({
+  data,
+  sourceFile,
+  active,
+  setActive,
+  download,
+}: {
+  data: Analysis;
+  sourceFile: File | null;
+  active: string;
+  setActive: (v: string) => void;
+  download: () => void;
+}) {
+  const m = data.metadata;
+  return (
+    <>
+      <div className="dataset-strip">
+        <div className="dataset-file">
+          <div className="file-icon">
+            <FileSpreadsheet size={18} />
+          </div>
+          <div>
+            <b>{m.filename}</b>
+            {sourceFile?.name === 'insyt_sample_sales.csv' && <span className="synthetic-badge">Synthetic demo data</span>}
+            <small>
+              <span className="live-dot"></span> Analysis complete <i>·</i> {(m.size_bytes / 1024).toFixed(1)} KB
+            </small>
+          </div>
+        </div>
+        <div className="dataset-meta">
+          <span>
+            <Database size={14} />
+            {m.rows.toLocaleString()} rows
+          </span>
+          <span>
+            <Table2 size={14} />
+            {m.columns} columns
+          </span>
+          <span className={m.missing_cells ? 'quality-warning' : 'quality-good'}>
+            <AlertCircle size={14} />
+            {m.missing_cells.toLocaleString()} missing
+          </span>
+        </div>
+      </div>
+      <div className="section-title">
+        <div>
+          <span className="section-kicker">AT A GLANCE</span>
+          <h2>Dataset overview</h2>
+        </div>
+        <button className="text-btn" onClick={() => setActive('Dataset Profile')}>
+          View dataset profile <ArrowRight size={14} />
+        </button>
+      </div>
+      <div className="metric-grid">
+        {data.kpis.map((k, i) => (
+          <div className="metric-card" key={k.label}>
+            <div className="metric-top">
+              <span>{k.label}</span>
+              <span className={`metric-icon icon-${i % 4}`}>
+                {[Activity, TrendingUp, Database, Network][i % 4] &&
+                  (() => {
+                    const I = [Activity, TrendingUp, Database, Network][i % 4];
+                    return <I size={15} />;
+                  })()}
+              </span>
+            </div>
+            <strong>
+              {typeof k.value === 'number' ? k.value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : k.value}
+            </strong>
+            <small>{k.detail}</small>
+          </div>
+        ))}
+      </div>
+      {active === 'Dataset Profile' ? (
+        <ProfileView data={data} />
+      ) : active === 'Trends & Anomalies' ? (
+        <>
+          <ChartSection charts={data.charts.filter((c) => c.type === 'line')} />
+          <TrendEvidence data={data} />
+          <FindingSection data={data} />
+          <AnomalySection data={data} />
+        </>
+      ) : active === 'Predictive Intelligence' ? (
+        <PredictivePanel data={data} sourceFile={sourceFile} />
+      ) : active === 'AI Report' ? (
+        <ReportSection data={data} download={download} />
+      ) : active === 'Data Analysis' ? (
+        <>
+          <ChartSection charts={data.charts} />
+          <TrendEvidence data={data} />
+          <FindingSection data={data} />
+          <AnomalySection data={data} />
+          <CorrelationSection data={data} />
+        </>
+      ) : (
+        <>
+          <div className="chart-section-head">
+            <div>
+              <span className="section-kicker">VISUAL EXPLORATION</span>
+              <h2>Patterns in your data</h2>
+            </div>
+            <span className="chart-note">
+              <span className="orange-dot"></span> Calculated from uploaded data
+            </span>
+          </div>
+          <ChartSection charts={data.charts.slice(0, 4)} />
+          <TrendEvidence data={data} />
+          <FindingSection data={data} />
+          <div className="insights-grid">
+            <AnomalySection data={data} />
+            <CorrelationSection data={data} />
+          </div>
+          <ReportSection data={data} download={download} />
+          <ProfileView data={data} compact />
+        </>
+      )}
+    </>
+  );
+}
+
+function ChartSection({ charts }: { charts: Chart[] }) {
+  if (!charts.length)
+    return (
+      <div className="empty-card">
+        <div className="empty-icon">
+          <TrendingUp size={19} />
+        </div>
+        <b>No time or category charts available</b>
+        <p>This dataset does not have enough suitable date, numeric, or category data to make these charts meaningful.</p>
+      </div>
+    );
+  return (
+    <div className="charts-grid">
+      {charts.map((c, i) => (
+        <div className={`chart-card ${charts.length === 1 ? 'chart-wide' : ''}`} key={c.id}>
+          <div className="chart-card-head">
+            <div>
+              <b>{c.title}</b>
+              <small>
+                {c.x_label} <span>·</span> {c.y_label}
+              </small>
+            </div>
+            <span className="chart-menu">
+              <BarChart3 size={16} />
+            </span>
+          </div>
+          <div className="chart-wrap">
+            <ResponsiveContainer width="100%" height="100%">
+              {c.type === 'line' ? (
+                <AreaChart data={c.data} margin={{ top: 12, right: 7, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id={`g${i}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={orange} stopOpacity={0.17} />
+                      <stop offset="100%" stopColor={orange} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 4" vertical={false} stroke="#edf0f2" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#929aa5' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 10, fill: '#929aa5' }} axisLine={false} tickLine={false} width={41} />
+                  <Tooltip
+                    contentStyle={{
+                      border: '1px solid #e9edf0',
+                      borderRadius: 9,
+                      fontSize: 12,
+                      boxShadow: '0 8px 22px #18263812',
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke={orange}
+                    strokeWidth={2.3}
+                    fill={`url(#g${i})`}
+                    dot={false}
+                    activeDot={{ r: 4, fill: orange, stroke: '#fff', strokeWidth: 2 }}
+                  />
+                </AreaChart>
+              ) : (
+                <BarChart data={c.data} margin={{ top: 12, right: 7, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 4" vertical={false} stroke="#edf0f2" />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: '#929aa5' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={0}
+                    angle={c.data.length > 6 ? -20 : 0}
+                    textAnchor={c.data.length > 6 ? 'end' : 'middle'}
+                    height={c.data.length > 6 ? 48 : 30}
+                  />
+                  <YAxis tick={{ fontSize: 10, fill: '#929aa5' }} axisLine={false} tickLine={false} width={37} />
+                  <Tooltip contentStyle={{ border: '1px solid #e9edf0', borderRadius: 9, fontSize: 12 }} />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    {c.data.map((_, j) => (
+                      <Cell key={j} fill={j === 0 ? orange : '#f5a47d'} fillOpacity={j === 0 ? 1 : 0.72} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FindingSection({ data }: { data: Analysis }) {
+  return (
+    <section className="block-section">
+      <div className="section-title">
+        <div>
+          <span className="section-kicker">WHAT STANDS OUT</span>
+          <h2>
+            Key findings <span className="count-badge">{data.findings.length}</span>
+          </h2>
+        </div>
+      </div>
+      {data.findings.length ? (
+        <div className="findings-grid">
+          {data.findings.slice(0, 6).map((f, i) => (
+            <article className="finding-card" key={i}>
+              <div className="finding-head">
+                <span className={`finding-icon fi-${i % 3}`}>
+                  {i === 0 ? <TrendingUp size={16} /> : i === 1 ? <Activity size={16} /> : <Sparkles size={16} />}
+                </span>
+                <span className="finding-tag">
+                  {f.severity} · {String(f.strength || 'descriptive')}
+                </span>
+              </div>
+              <b>{f.title}</b>
+              <p>{f.description}</p>
+              {f.columns?.length > 0 && (
+                <div className="finding-columns">
+                  <span>FIELDS</span>
+                  {f.columns.join(' · ')}
+                </div>
+              )}
+              <div className="finding-evidence">
+                <span>WHY IT APPEARED</span>
+                {f.method}
+              </div>
+              <details className="finding-details">
+                <summary>Supporting evidence</summary>
+                <pre>{JSON.stringify(f.evidence, null, 2)}</pre>
+              </details>
+              <div className="finding-action">
+                <b>Suggested next step</b>
+                <p>{f.next_step}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-card">
+          <b>No meaningful findings crossed the analysis thresholds</b>
+          <p>
+            There is not enough variation or evidence in this dataset to report a reliable pattern. Descriptive statistics
+            remain available in the dataset profile.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AnomalySection({ data }: { data: Analysis }) {
+  return (
+    <section className="block-section">
+      <div className="section-title">
+        <div>
+          <span className="section-kicker">DATA QUALITY CHECK</span>
+          <h2>
+            Potential outliers <span className="count-badge">{data.anomalies.length}</span>
+          </h2>
+        </div>
+      </div>
+      {data.anomalies.length ? (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>FIELD</th>
+                <th>OBSERVED VALUE</th>
+                <th>ROW</th>
+                <th>METHOD</th>
+                <th>BOUNDS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.anomalies.slice(0, 8).map((a, i) => (
+                <tr key={i}>
+                  <td>
+                    <b>{a.column}</b>
+                  </td>
+                  <td className="outlier-val">{typeof a.value === 'number' ? a.value.toLocaleString() : a.value}</td>
+                  <td>#{a.row}</td>
+                  <td>
+                    <span className="method-pill">{a.method}</span>
+                  </td>
+                  <td className="context-cell">
+                    {Number(a.lower_bound).toLocaleString()}–{Number(a.upper_bound).toLocaleString()} · {a.context}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="table-note">
+            <AlertCircle size={14} /> Statistical outliers are candidates to review, not necessarily errors or fraud.
+          </div>
+        </div>
+      ) : (
+        <div className="empty-card compact-empty">
+          <span className="good-check">
+            <Check size={16} />
+          </span>
+          <b>No potential outliers detected</b>
+          <p>Numeric values were checked with the 1.5×IQR method.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TrendEvidence({ data }: { data: Analysis }) {
+  return (
+    <section className="block-section">
+      <div className="section-title">
+        <div>
+          <span className="section-kicker">PERIOD COMPARISONS</span>
+          <h2>
+            Changes over time <span className="count-badge">{data.trends.length}</span>
+          </h2>
+        </div>
+      </div>
+      {data.trends.length ? (
+        <div className="trend-list">
+          {data.trends.slice(0, 6).map((t, i) => (
+            <div className="trend-row" key={`${t.column}-${i}`}>
+              <div className="trend-direction">
+                <TrendingUp size={17} />
+              </div>
+              <div className="trend-copy">
+                <b>
+                  {t.column}{' '}
+                  <span>
+                    {t.comparison.from_period.slice(0, 7)} → {t.comparison.to_period.slice(0, 7)}
+                  </span>
+                </b>
+                <p>{t.description}</p>
+                <small>
+                  {t.method} · observations {t.observations.from} → {t.observations.to}
+                </small>
+              </div>
+              <strong
+                className={
+                  t.change_percent === null
+                    ? 'neutral-change'
+                    : t.change_percent >= 0
+                    ? 'positive-change'
+                    : 'negative-change'
+                }
+              >
+                {t.change_percent === null ? '—' : `${t.change_percent > 0 ? '+' : ''}${t.change_percent.toFixed(1)}%`}
+              </strong>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-card compact-empty">
+          <div className="empty-icon">
+            <TrendingUp size={17} />
+          </div>
+          <b>No suitable period comparisons available</b>
+          <p>Time comparisons need a suitable date field and numeric observations across multiple periods.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CorrelationSection({ data }: { data: Analysis }) {
+  return (
+    <section className="block-section">
+      <div className="section-title">
+        <div>
+          <span className="section-kicker">RELATIONSHIPS</span>
+          <h2>
+            Correlations <span className="count-badge">{data.correlations.length}</span>
+          </h2>
+        </div>
+      </div>
+      {data.correlations.length ? (
+        <div className="correlation-list">
+          {data.correlations.slice(0, 5).map((c) => (
+            <div className="correlation-row" key={c.column_a + c.column_b}>
+              <div className="corr-mark">
+                <Network size={16} />
+              </div>
+              <div className="corr-copy">
+                <b>
+                  {c.column_a} <span>↔</span> {c.column_b}
+                </b>
+                <p>{c.description}</p>
+                <small>
+                  Pearson r · {c.observations} shared observations
+                </small>
+              </div>
+              <div className="corr-score">
+                <strong>
+                  {c.coefficient > 0 ? '+' : ''}
+                  {c.coefficient.toFixed(2)}
+                </strong>
+                <small>{c.strength}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-card compact-empty">
+          <div className="empty-icon">
+            <Network size={17} />
+          </div>
+          <b>No notable correlations found</b>
+          <p>Needs two numeric fields with sufficient shared observations and variation.</p>
+        </div>
+      )}
+      <div className="micro-disclaimer">Correlation describes association; it does not establish cause and effect.</div>
+    </section>
+  );
+}
+
+function ReportSection({ data, download }: { data: Analysis; download: () => void }) {
+  return (
+    <section className="report-card">
+      <div className="report-orb">
+        <Sparkles size={19} />
+      </div>
+      <div className="report-content">
+        <div className="report-label">
+          <span className="section-kicker">
+            {data.ai_status === 'gemini' ? 'AI-ASSISTED EXECUTIVE SUMMARY' : 'EXECUTIVE SUMMARY'}
+          </span>
+          <span className="report-source">
+            <i></i>
+            {data.ai_status === 'gemini' ? 'Gemini + verified analysis' : 'Verified statistical analysis'}
+          </span>
+        </div>
+        <h2>Here’s the story in your data.</h2>
+        <p className="report-summary">{data.executive_summary}</p>
+        {data.recommendations.length > 0 && (
+          <div className="recommendations">
+            <b>Suggested next steps</b>
+            {data.recommendations.slice(0, 3).map((r, i) => (
+              <div key={i}>
+                <span>{String(i + 1).padStart(2, '0')}</span>
+                {r}
+              </div>
+            ))}
+          </div>
+        )}
+        <button className="btn btn-primary report-download" onClick={download}>
+          <ArrowDownToLine size={15} /> Download full report <span>· Markdown</span>
+        </button>
+      </div>
+      <div className="report-watermark">
+        <Sparkles size={90} />
+      </div>
+    </section>
+  );
+}
+
+function ProfileView({ data, compact = false }: { data: Analysis; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const profiles = compact ? data.column_profiles.slice(0, 5) : data.column_profiles;
+  return (
+    <section className={`profile-section ${compact ? 'profile-compact' : ''}`}>
+      <div className="section-title">
+        <div>
+          <span className="section-kicker">UNDER THE HOOD</span>
+          <h2>
+            Dataset profile <span className="count-badge">{data.column_profiles.length} fields</span>
+          </h2>
+        </div>
+        {compact && (
+          <button className="text-btn" onClick={() => setOpen(!open)}>
+            {open ? 'Show less' : 'View all fields'} <ChevronDown size={14} />
+          </button>
+        )}
+      </div>
+      <div className="profile-grid">
+        {(compact && open ? data.column_profiles : profiles).map((p) => (
+          <div className="profile-field" key={p.name}>
+            <div className="field-top">
+              <b>{p.name}</b>
+              <span>{p.type}</span>
+            </div>
+            <div className="field-stats">
+              <span>{p.unique} unique</span>
+              <span>{p.missing} missing</span>
+            </div>
+            {p.statistics && (
+              <div className="field-range">
+                <span>
+                  MIN <b>{Number(p.statistics.min).toLocaleString(undefined, { maximumFractionDigits: 2 })}</b>
+                </span>
+                <span>
+                  AVG <b>{Number(p.statistics.mean).toLocaleString(undefined, { maximumFractionDigits: 2 })}</b>
+                </span>
+                <span>
+                  MAX <b>{Number(p.statistics.max).toLocaleString(undefined, { maximumFractionDigits: 2 })}</b>
+                </span>
+              </div>
+            )}
+            {p.top_values && (
+              <div className="top-values">
+                {p.top_values.slice(0, 3).map((x) => (
+                  <span key={x.value}>
+                    {x.value} <i>{x.count}</i>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export default App;
